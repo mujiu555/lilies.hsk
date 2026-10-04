@@ -1,6 +1,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module L0 where
 
+import Shared
 -- | Lexeme, La short for Lexeme and Atom
 -- Anything within angle brackets are text provided by reader
 -- square brackets are optional,
@@ -62,11 +63,11 @@ data Literal
   deriving (Show, Eq)
 
 -- | Sexp, Es short for Expression S-Expression
-data Sexp i e l
+data Sexp i l
   = EsLiteral      l
-  | EsList         [Sexp i e l]                            -- ^ @(...)@               Variable-Length   Heterogeneous
-  | EsSeq          [Sexp i e l]                            -- ^                       A Sequence of Expressions, Currently AST Internal Sequence of expressions
-  | EsLoc          i (Sexp i e l)                          -- ^                       A Node contains Parse Information, AST Internal Information Provider
-  | EsErr          e                                       -- ^                       A Node contains Parse Error, AST Internal Information Provider
+  | EsList         [Sexp i l]                              -- ^ @(...)@               Variable-Length   Heterogeneous
+  | EsSeq          [Sexp i l]                              -- ^                       A Sequence of Expressions, Currently AST Internal Sequence of expressions
+  | EsLoc          i (Sexp i l)                            -- ^                       A Node contains Parse Information, AST Internal Information Provider
+  | EsErr          Serr                                    -- ^                       A Node contains Parse Error, AST Internal Information Provider
   deriving (Show, Eq)
 
