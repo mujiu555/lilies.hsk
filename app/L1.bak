@@ -1,0 +1,99 @@
+-- L1
+module L1 where
+
+import Data.Text (Text)
+
+newtype Sym = Sym { unSym :: Text } deriving (Show, Eq)
+
+data Argument
+  = AlPositional Expr                 -- ^ @<val>@
+  | AlNamed      Sym Expr             -- ^ @#:<name> <val>@
+
+data Param
+  = PlParam      Sym Expr Expr        -- ^ @(<name> <type> [default])@
+  | PlRest       Sym Expr             -- ^ @(<name> <type>)@
+  | PlList       [Param] Param        -- ^ @(<postional>... . <rest>)@
+
+data Binding
+  = BeEntity     Pattern Expr Expr    -- ^ @(<pattern> <type> <val>)@
+
+data Condition
+  = CaCondition  Expr Expr            -- ^ @(<cond> <then>)@
+  | CaCondElse   Expr                 -- ^ @(:else <then>)@
+
+data MatchArm
+  = MaArm        Pattern Expr         -- ^ @(<pattern> <body>)@
+  | MaMatchElse  Expr                 -- ^ @(:else <body>)@
+
+data Pattern
+  = PmOr         [Pattern]            -- ^ @(:or <sub-pattern> ...)@                              Pattern match         OR, in match arm
+  | PmAnd        [Pattern]            -- ^ @(:and <sub-pattern> ...)@                             Pattern match         AND, in match arm
+  | PmLit        Literal              -- ^ @<lit>@                                                Pattern match         Literal
+  | PmWildcard                        -- ^ @_@                                                    Pattern match         Wildcard, ignore
+  | PmBinder     Sym                  -- ^ @<sym>@                                                Pattern match         Binder
+  | PmCtor       Sym [Pattern]        -- ^ @(<ctor> <pattern>...)@                                Pattern match         Constructor Extraction
+  | PmGuard      Pattern Expr         -- ^ @(:guard <pattern> <cond>)                             Pattern match         Guard
+  | PmAs         Sym Pattern          -- ^ @(:as <sym> <pattern>)                                 Pattern match         Whole Alias
+  | PmTuple      [Pattern]            -- ^ @(...)@                                                Pattern match         Tuple
+
+data Values
+  = VaInteger    Integer
+  | VaDecimal    Scientific
+  | VaBoolean    Bool
+  | VaCharacter  Char
+  | VaString     Text
+  | VaRegExp     Text
+
+data Core
+  = FsApplication Expr [Argument]     -- ^ @(<expr> <args>...)@                                   Function              Application
+  | FsDefinition  Pattern Expr Expr   -- ^ @(define <pattern> <type> <val>)@                                            Definition
+  | FsLambda      Param Expr          -- ^ @(lambda <parameter-list> <body>)@                                           Lambda
+  | FsQuote       Expr                -- ^ @(quote <expr>)@                                                             Quote
+  | FsIfThenElse  Expr Expr Expr      -- ^ @(if <cond> <then> <else>)@                            If Then Else          Branching
+
+data Forms
+  = FsQuasiQuote  Expr                -- ^ @(quasiquote <expr>)@                                                        Quasiquote
+  | FsUnquote     Expr                -- ^ @(unquote <expr>)@                                     Quasiquote            Unquote
+  | FsSplicing    Expr                -- ^ @(splicing <expr>)@                                    Quasiquote            Unquote Splicing
+  --
+  | FsAnnotation  Expr Expr           -- ^ @(annotation <metadata> <expr>)@                       Metadata              Annotation
+  --
+  | FsSelf                            -- ^ @Self@
+  | FsMacro                           -- ^ @Macro@                                                Macro                 Type Symbol
+  --
+  | FsLet         [Binding] Expr      -- ^ @(let ((<pattern> <type> <val>)...) <body>)@                                 Let
+  | FsLetSeq      [Binding] Expr      -- ^ @(let:seq ((<pattern> <type> <val>)...) <body>)@       Sequntial             Let
+  | FsLetRec      [Binding] Expr      -- ^ @(let:rec ((<pattern> <type> <val>)...) <body>)@       Recursive             Let
+  | FsLetSeqRec   [Binding] Expr      -- ^ @(let:seqrec ((<pattern> <type> <val>)...) <body>)@    Sequntial Recursive   Let
+  --
+  | FsConditional [Condition]         -- ^ @(cond <condition>...)@                                Conditional           Branching
+  | FsWhen        Expr Expr           -- ^ @(when <cond> <then>)@                                 When                  Branching
+  | FsUnless      Expr Expr           -- ^ @(unless <cond> <else>)@                               Unless                Branching
+  --
+  | FsMatch       Expr [MatchArm]     -- ^ @(match <scrutinee> <arms>...)@                                              Pattern Match
+  --
+  | FsLoop        Sym Expr            -- ^ @(loop <label> <body>)@                                                      Loop
+  | FsWhile       Sym Expr Expr       -- ^ @(while <label> <cond> <body>)@                        While                 Loop
+  | FsUntil       Sym Expr Expr       -- ^ @(until <label> <cond> <body>)@                        Until                 Loop, sugar
+  | FsFor         Sym [Binding] Expr  -- ^ @(for <label> ((<pattern> <type> <val>)...) <body>)@   For                   Loop, named let, sugar for unnamed lambda
+  | FsForEach     Sym [Binding] Expr  -- ^ @(foreach <label> ((<name> <type> <exp>)...) <body>)@  Foreach               Loop, sugar, sugar for map function
+  | FsBreak       Sym Expr            -- ^ @(:break <label> <ret-val>)@                           Loop                  Break
+  | FsContinue    Sym                 -- ^ @(:continue <label>)@                                  Loop                  Continue
+  --
+  | FsSequence    Sym [Expr]          -- ^ @(sequence <label> <body>...)@                         Code Block            Sequence
+  | FsReturn      Sym Expr            -- ^ @(:return <label> <val>)@                              Sequence              Return
+  --
+  | FsThen        Expr [Expr]         -- ^ @(then <seed> <funcall>...)@                           Then                  Pipe, first arguement, lower to let
+  | FsPipe        Expr [Expr]         -- ^ @(pipe <seed> <funcall> ...)@                                                Pipe, with place holder, lower to let
+  | FsPipePlace   Integer             -- ^ @:<int>@                                               Pipe                  Place Holder
+
+data Expr
+  = ElSymbol      Sym                 -- ^                                                        Ordinary Identifier
+  | ElForm        Forms               -- ^                                                        Forms
+  | ElLit         Literal             -- ^                                                        Literal
+  | ElVector      [Expr]              -- ^                                                        Fixed-Length          Homogeneous
+  | ElArray       [Expr]              -- ^                                                        Variable-Length       Homogeneous
+  | ElTuple       [Expr]              -- ^                                                        Fixed-Length          Heterogeneous
+  | ElList        [Expr]              -- ^                                                        Variable-Length       Heterogeneous
+  | ElObjRef                          -- ^ @#+<kind name:address>@                                Literal Object Represent, AST Internal Object Reference Node
+  | ElSeq         [Expr]              -- ^                                                        A Sequence of Expressions
