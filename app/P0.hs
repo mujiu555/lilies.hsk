@@ -53,11 +53,11 @@ int radix sgn s = case str2int radix '\'' s of
     sign Nothing    v                        = EsLiteral (LiInteger v)
     sign _          _                        = EsErr EeParseError
 
-f3 :: (Integer -> Integer -> Double) -> Maybe Char -> String -> String -> Sexp i Literal
+f3 :: (Integer -> Integer -> String -> String -> Double) -> Maybe Char -> String -> String -> Sexp i Literal
 f3 f sgn i r = case (str2int 10 '\'' i, str2int 10 '\'' r) of
   (Nothing, _)       -> EsErr EeParseError
   (_, Nothing)       -> EsErr EeParseError
-  (Just i', Just r') -> sign sgn (f i' r')
+  (Just i', Just r') -> sign sgn (f i' r' i r)
   where
     sign (Just '+') v = EsLiteral (LiReal v)
     sign (Just '-') v = EsLiteral (LiReal (-v))
@@ -65,10 +65,10 @@ f3 f sgn i r = case (str2int 10 '\'' i, str2int 10 '\'' r) of
     sign _   _        = EsErr EeParseError
 
 float :: Maybe Char -> String -> String -> Sexp i Literal
-float = f3 (\x y -> fromInteger x + fromInteger y / 10 ^ length (show y))
+float = f3 (\x y _ y' -> fromInteger x + fromInteger y / 10 ^ length (filter (/= '\'') y'))
 
 rational :: Maybe Char -> String -> String -> Sexp i Literal
-rational = f3 (\x y -> fromInteger x / fromInteger y)
+rational = f3 (\x y _ _-> fromInteger x / fromInteger y)
 
 standard :: Maybe Char -> String -> Maybe Char -> String -> Sexp i Literal
 standard s b se e = case (str2int 10 '\'' b, str2int 10 '\'' e) of
@@ -123,7 +123,7 @@ type Parser = P.Parsec Void String
 
 strstr :: String -> Sexp i Literal
 strstr s =
-  case P.runParser (P.many (unicode <|> regular <|> plain)) "" s of
+  case P.runParser (P.many (unicode <|> regular <|> plain) <* P.eof) "" s of
     Left  _  -> EsErr EeInvalidEscape
     Right cs -> maybe (EsErr EeInvalidEscape) (EsLiteral . LiString) (sequence cs)
   where

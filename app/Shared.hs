@@ -29,3 +29,6 @@ data Serr
   | EeUnknownSigil     -- ^ @#@ beginning none of the known forms
   | EeInvalidChar      -- ^ a character that begins no lexeme
   deriving (Show, Eq)
+
+newtype ErrorList
+  = ErrorList [(Span, Serr)]
