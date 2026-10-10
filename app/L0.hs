@@ -65,12 +65,5 @@ data Literal
   | LiString       String                                  -- ^                                         String, escape interpreted
   deriving (Show, Eq)
 
--- | Sexp, Es short for Expression S-Expression
-data Sexp i l
-  = EsLiteral      l
-  | EsList         [Sexp i l]                              -- ^ @(...)@               Variable-Length   Heterogeneous
-  | EsSeq          [Sexp i l]                              -- ^                       A Sequence of Expressions, Currently AST Internal Sequence of expressions
-  | EsLoc          i (Sexp i l)                            -- ^                       A Node contains Parse Information, AST Internal Information Provider
-  | EsErr          Serr                                    -- ^                       A Node contains Parse Error, AST Internal Information Provider
-  deriving (Show, Eq)
-
+type L0  = Sexp Lexeme
+type L0p = Sexp Literal

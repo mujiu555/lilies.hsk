@@ -9,21 +9,18 @@ import Data.Void (Void)
 import L0
 import Shared
 
-type L0  i = Sexp i Lexeme
-type L0p i = Sexp i Literal
-
 -- | l0p Process l0-depend data
-l0p :: (a -> Sexp i b) -> Sexp i a -> Sexp i b
+l0p :: (a -> Sexp b) -> Sexp a -> Sexp b
 l0p f (EsLiteral l)                          = f                              l
 l0p f (EsList xs)                            = EsList          (map (l0p f) xs)
 l0p f (EsSeq xs)                             = EsSeq           (map (l0p f) xs)
 l0p f (EsLoc i x)                            = EsLoc                i (l0p f x)
 l0p _ (EsErr e)                              = EsErr                          e
 
-l0Tol0p :: L0 i -> L0p i
+l0Tol0p :: L0 -> L0p
 l0Tol0p = l0p parse
 
-parse :: Lexeme -> Sexp i Literal
+parse :: Lexeme -> Sexp Literal
 parse (LaSymbol                        name) = EsLiteral (LiSymbol        name)
 parse (LaSyntaxSym                     name) = EsLiteral (LiSyntaxSym     name)
 parse (LaDecimal      sign                i) = int                    10 sign i
@@ -43,7 +40,7 @@ parse (LaUnicode                       code) = unicode2char                code
 parse (LaString                         str) = strstr str
 parse (LaRawString                      str) = EsLiteral (LiString         str)
 
-int :: Integer -> Maybe Char -> String -> Sexp i Literal
+int :: Integer -> Maybe Char -> String -> Sexp Literal
 int radix sgn s = case str2int radix '\'' s of
   Nothing -> EsErr EeParseError
   Just i  -> sign sgn i
@@ -53,7 +50,7 @@ int radix sgn s = case str2int radix '\'' s of
     sign Nothing    v                        = EsLiteral (LiInteger v)
     sign _          _                        = EsErr EeParseError
 
-f3 :: (Integer -> Integer -> String -> String -> Double) -> Maybe Char -> String -> String -> Sexp i Literal
+f3 :: (Integer -> Integer -> String -> String -> Double) -> Maybe Char -> String -> String -> Sexp Literal
 f3 f sgn i r = case (str2int 10 '\'' i, str2int 10 '\'' r) of
   (Nothing, _)       -> EsErr EeParseError
   (_, Nothing)       -> EsErr EeParseError
@@ -64,13 +61,13 @@ f3 f sgn i r = case (str2int 10 '\'' i, str2int 10 '\'' r) of
     sign Nothing    v = EsLiteral (LiReal v)
     sign _   _        = EsErr EeParseError
 
-float :: Maybe Char -> String -> String -> Sexp i Literal
+float :: Maybe Char -> String -> String -> Sexp Literal
 float = f3 (\x y _ y' -> fromInteger x + fromInteger y / 10 ^ length (filter (/= '\'') y'))
 
-rational :: Maybe Char -> String -> String -> Sexp i Literal
+rational :: Maybe Char -> String -> String -> Sexp Literal
 rational = f3 (\x y _ _-> fromInteger x / fromInteger y)
 
-standard :: Maybe Char -> String -> Maybe Char -> String -> Sexp i Literal
+standard :: Maybe Char -> String -> Maybe Char -> String -> Sexp Literal
 standard s b se e = case (str2int 10 '\'' b, str2int 10 '\'' e) of
   (Nothing, _)       -> EsErr EeParseError
   (_, Nothing)       -> EsErr EeParseError
@@ -121,7 +118,7 @@ str2int radix sep s
 
 type Parser = P.Parsec Void String
 
-strstr :: String -> Sexp i Literal
+strstr :: String -> Sexp Literal
 strstr s =
   case P.runParser (P.many (unicode <|> regular <|> plain) <* P.eof) "" s of
     Left  _  -> EsErr EeInvalidEscape
@@ -156,11 +153,11 @@ strstr s =
       where
         validate n = 0 <= n && n <= 0x10FFFF && not (0xD800 <= n && n <= 0xDFFF)
 
-str2char :: String -> Sexp i Literal
+str2char :: String -> Sexp Literal
 str2char [c] = EsLiteral (LiCharacter c)
 str2char _   = EsErr EeParseError
 
-escape2char :: String -> Sexp i Literal
+escape2char :: String -> Sexp Literal
 escape2char = maybe (EsErr EeInvalidEscape) (EsLiteral . LiCharacter) . flip lookup table
   where
     table =
@@ -191,7 +188,7 @@ escape2char = maybe (EsErr EeInvalidEscape) (EsLiteral . LiCharacter) . flip loo
       ]
 
 
-unicode2char :: String -> Sexp i Literal
+unicode2char :: String -> Sexp Literal
 unicode2char s = case str2int 16 ' ' s of
     Just i | validate i -> EsLiteral (LiCharacter (chr (fromInteger i)))
     _                   -> EsErr EeInvalidUnicode

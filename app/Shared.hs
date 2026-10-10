@@ -1,5 +1,15 @@
 module Shared where
 
+-- | Sexp, Es short for Expression S-Expression
+-- The parse information a node carries is a 'Span'.
+data Sexp l
+  = EsLiteral      l
+  | EsList         [Sexp l]                                -- ^ @(...)@               Variable-Length   Heterogeneous
+  | EsSeq          [Sexp l]                                -- ^                       A Sequence of Expressions, Currently AST Internal Sequence of expressions
+  | EsLoc          Span (Sexp l)                           -- ^                       A Node contains Parse Information, AST Internal Information Provider
+  | EsErr          Serr                                    -- ^                       A Node contains Parse Error, AST Internal Information Provider
+  deriving (Show, Eq)
+
 data Span = Span
   { loc :: Integer
   , col :: Integer
