@@ -5,12 +5,15 @@ import Shared
 data L1Identifier
   -- | @<id>@                                                                            Identifier,
   -- holding identifier unique id, all same identifier must have same id, all different identifier must have different id
-  = L1Identifier String Integer  
+  = L1Identifier String Integer
+  -- | @<id>@                                                                            Symbol value,
+  -- datam
+  | L1Symbol     String Integer
   deriving (Show, Eq)
 
 data Value
-  -- |                                                                                   Symbol value
-  = ViSymbol     String  Integer   
+  -- |                                                                                   Symbol
+  = ViSymbol     L1Identifier
   -- |                                                                                   Signed 2's Complement Integer
   | ViInteger    Integer         
   -- |                                                                                   IEEE 754 Binary Floating-Point Real
@@ -18,7 +21,7 @@ data Value
   -- |                                                                                   Boolean
   | ViBoolean    Bool            
   -- |                                                                                   Character
-  | ViCharacter  Char            
+  | ViCharacter  Char
   -- |                                                                                   String, escape interpreted
   | ViString     String          
   -- | @()@                                                                              Unit
@@ -77,6 +80,7 @@ data L1Match      a
   -- | @(match <scrutinee> (<pattern> <body>)...)@                                       Pattern Match
   = L1Match       a   [L1MatchArm a]        
   -- | @(case <scrutinee> (<lit>...) (<pattern> <body>)...)@ Syntax Object               Pattern Match
+  -- lit are symbols that will never be treat as odinary pattern variable
   | L1Case        a   [L1Identifier] [L1MatchArm a]    
   deriving (Show, Eq)
 
@@ -94,21 +98,39 @@ data L1Define     a
 
 data L1IfThenElse a
   -- | @(if <cond> <then> <else>)@                           If Then Else                Branching
-  = L1IfThenElse  a   a   a      
+  = L1IfThenElse  a   a   a
+  deriving (Show, Eq)
+
+data L1Argument   a
+  -- | @{[synsym] <argument>}@                               Argument                    Binding,
+  -- parse synsym in l0 to a concrete identifier that corresponding to parameter of the lambda being calling
+  = L1Argument    (Maybe L1Identifier) a
   deriving (Show, Eq)
 
 data L1Apply      a
   -- | @(<forms> <argument>...)@                                                         Application
-  = L1Apply       a   [a]        
-  -- | @{[synsym] <argument>}@                               Argument                    Binding
-  | L1Argument    (Maybe a) a    
+  = L1Apply       a   [L1Argument a]
   deriving (Show, Eq)
 
-data L1Param
+data L1LamParam
   -- | @<identifier>@                                                                    Parameter
   = L1ParamMatcher    L1Identifier
   -- | @(<identifier>...)@                                                               Parameter
   | L1ParamList       [L1Identifier]
+  deriving (Show, Eq)
+
+data L1SigParam   a
+  -- | @<type>@                                                                          Parameter
+  = L1SigMatcher  a
+  -- | @(:Self <type>...)@                                                               Parameter
+  | L1SigList     [a]
+  deriving (Show, Eq)
+
+data L1CstBinding a
+  -- | @(<type> <type>)@                                     Super Class(Include)        Constraint
+  = L1SupBinding a a
+  -- | @(<type> <type>)@                                     Type Class(Constraint)      Constraint
+  | L1ClsBinding a a
   deriving (Show, Eq)
 
 -- | L1Sig
@@ -120,43 +142,42 @@ data L1Param
 --
 -- @(define * (#type 1) (#type 0))@
 -- For Poly Type Class
---   @(define Monad (class ((type (*) *)) *) (lambda (m) (record (:include (Applicative m)) (: >>= (forall (x y) (function ((m x) (function (x) (m y))) (m y)))))))@
+--   @(define Monad (class (:Self (type (:Self *) *)) *) (lambda (m) (record (:include (Applicative m)) (: >>= (forall (x y) (function (:Self (m x) (function (:Self x) (m y))) (m y)))))))@
 -- For Poly Type
---   @(define List (type (*) *) (lambda (a) (mu (lambda (L) (enum (: list (record (: car a) (: cdr L))) (: nil ()))))))@
+--   @(define List (type (:Self *) *) (lambda (a) (mu (lambda (L) (enum (: list (record (: car a) (: cdr L))) (: nil ()))))))@
 -- For Poly Function
---   @(define foo (forall (a) (constraint ((Sum a)) (function (a a) a))) (lambda (dict) (lambda (x y) ((invoke dict sum) x y))))@
+--   @(define foo (forall (a) (constraint ((Sum a)) (function (:Self a a) a))) (lambda (dict) (lambda (x y) ((invoke dict sum) x y))))@
 -- For implement a type class
 --   @(define monad (include ((Applicative Maybe)) (Monad Maybe)) (lambda (cst) (record (: return (invoke cst pure)) (: >>= (lambda (a b) ...)))))@
 -- For instance a enum...
 --   @(define bar (List #int) (enum (: list (record (: car 1) (: cdr (enum (: nil #unit)))))))
 -- For module:
---   @(define baz * (record (: Monad (class ((type (*) *)) *)) (: List (type (*) *)) (: monad (Monad Maybe)) (: bar (List #int))))@
+--   @(define baz * (record (: Monad (class (:Self (type (:Self *) *)) *)) (: List (type (:Self *) *)) (: monad (Monad Maybe)) (: bar (List #int))))@
 -- For instance a module:
 --   @(define mod-baz baz (record (: Monad Monad) (: List List) (: monad monad) (: bar bar)))@
 -- Poly module is also support,
 -- For macro:
---   @(define when (macro #syn #syn) (lambda ctx (case ctx ((_ cond then) (syntax (list (quote if) cond then ()))) (:else (error "")))))@
+--   @(define when (macro #syn #syn) (lambda ctx (case ctx () ((_ cond then) (syntax (list (quote if) cond then ()))) (:else (error "")))))@
 -- For non named signature
---   @(define id (forall (a) (mu (lambda (L) (function (tuple L a) a)))) (lambda f (case ((_ a) a) (:else (error "")))))@
+--   @(define id (forall (a) (mu (lambda (L) (function (:Self (tuple L a)) a)))) (lambda f (case ((_ a) a) (:else (error "")))))@
 --   It is resonable, but, actually, will never pass the type check, so, type level recursive will not allowed,
 --   you can try to letting function to accept function invoke expression itself, but it will never pass the compilication
 data L1Sig        a
   -- | @(function <param> <return>)@                         Function                    Signature
-  = L1Function    a   a          
+  = L1Function    (L1SigParam a)   a          
   -- | @(macro <param> <syntax>)@                            Macro                       Signature
-  | L1Macro       a   a          
+  | L1Macro       (L1SigParam a)   a          
   -- | @(type <param> <type-sig>)@                           Type Constructor            Signature
-  | L1Type        a   a          
+  | L1Type        (L1SigParam a)   a          
   -- | @(class <param> <type-sig>)@                          Type Class                  Signature
-  | L1Class       a   a          
+  | L1Class       (L1SigParam a)   a          
   -- | @(module <param> <module-sig>)@                       Module                      Signature
-  | L1Module      a   a          
+  | L1Module      (L1SigParam a)   a          
   -- | @(constraint (<type-class-constraint>...) <body>)@    Type                        Constraint
-  | L1Constraint  [a] a          
+  | L1Constraint  [L1CstBinding a] a          
   -- | @(include (<super-class-constraint>...) <body>)@      Super                       Constraint
-  | L1Include     [a] a          
-  -- | @(<constraint> <type>...)@                            Constraint                  Form
-  | L1CstForm     a   [a]        
+  -- Type Class Inheritance
+  | L1Include     [L1CstBinding a] a          
   deriving (Show, Eq)
 
 data L1Lambda     a
@@ -168,7 +189,7 @@ data L1Lambda     a
   --   still fails because of negative-position self-reference, so it can never
   --   pass the type check.  The lambda in macros, by contrast, only receives
   --   the expression itself.
-  = L1Lambda      L1Param   a          
+  = L1Lambda      L1LamParam   a          
   -- | @(forall (<id>...) <body>)@                           Typed                       Constructor,
   -- NOTE: The slot is typed as 'L1Param', so a matcher (@L1ParamMatcher@)
   --   is syntactically admissible here.  Logically it is also sound: the
@@ -182,7 +203,7 @@ data L1Lambda     a
   --   Furhtermore, even if we provide dependent type,
   --   such construct would still be unsound, since the type constructor would appear in negative position,
   --   letting the recursive type encode itself and yielding T = T -> T (Girard's paradox)
-  | L1Forall      L1Param a      
+  | L1Forall      L1LamParam a      
   deriving (Show, Eq)
 
 data L1TypBinder     a
@@ -211,7 +232,7 @@ data L1Construct  a
   -- | @(mu (lambda (<name>) <body>))@                       Recursive Type              Binder
   | L1Mu          (L1Lambda a)              
   -- | @(fix (lambda (<name>) <body>))@                      Recursive function          Binder
-  | L1Fix         (L1Lambda a)              
+  | L1Fix         (L1Lambda a)
   -- | @(syntax <expr>)@                                     Syntax                      Expression
   | L1Syntax      a              
   -- | @(quote <expr>)@                                      Quote                       Expression
@@ -335,6 +356,7 @@ data L1Sequence   a
 -- E.g., @{[opt]<mond>}@ means, opt is optional, mond is mandatory, and all two together to be a form
 data L1Form
   = Fl1Define      (L1Define     L1Form)
+  | Fl1Lambda      (L1Lambda     L1Form)
   | Fl1Signature   (L1Sig        L1Form)
   | Fl1Module      (L1Module     L1Form)
   | Fl1Types                     L1Types
