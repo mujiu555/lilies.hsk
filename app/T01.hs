@@ -1,23 +1,18 @@
-
 module T01 where
 
 import L0
 import L1
 import Shared
 
-namingResolving :: L0p -> L1Form
-namingResolving (EsLiteral      l            ) =                         --
-namingResolving (EsList         [Sexp l]     ) =                         -- ^ @(...)@               Variable-Length   Heterogeneous
-namingResolving (EsSeq          [Sexp l]     ) =                         -- ^                       A Sequence of Expressions, Currently AST Internal Sequence of expressions
-namingResolving (EsLoc          Span (Sexp l)) =                         -- ^                       A Node contains Parse Information, AST Internal Information Provider
-namingResolving (EsErr          Serr         ) =                         -- ^                       A Node contains Parse Error, AST Internal Information Provider
-
-  = Fl1Definition  (L1Define     L1Form)
-  | Fl1Signature   (L1Sig        L1Form)
-  | Fl1Types                     L1Types
-  | Fl1Construct   (L1Construct  L1Form)
-  | Fl1IfThenElse  (L1IfThenElse L1Form)
-  | Fl1Application (L1Apply      L1Form)
-  | Fl1Match       (L1Match      L1Form)
-  | Fl1Cont1       (L1DlCont1    L1Form)
-  | Fl1Common      (L1Common     L1Form)
+resolve :: L0p -> L1Form
+resolve (EsLiteral (LiInteger                  i)) = Fl1Common (L1Literal   (ViInteger i))
+resolve (EsLiteral (LiReal                     r)) = Fl1Common (L1Literal      (ViReal r))
+resolve (EsLiteral (LiBoolean                  b)) = Fl1Common (L1Literal   (ViBoolean b))
+resolve (EsLiteral (LiCharacter                c)) = Fl1Common (L1Literal (ViCharacter c))
+resolve (EsLiteral (LiString                   s)) = Fl1Common (L1Literal    (ViString s))
+resolve (EsList [EsLiteral (LiSymbol "quote"), l]) = Fl1Construct (L1Quote (resolve l))
+resolve (EsList                     (fun: params)) = Fl1Apply  (L1Apply (resolve fun) (map resolve params))
+resolve (EsSeq                                  l) = Fl1Common (L1Program (map resolve l))
+resolve (EsLoc                                s e) = Fl1Common (L1Loc       (resolve e) s)
+resolve (EsErr                                  e) = Fl1Common (L1Err                   e)
+resolve _                                          = Fl1Common (L1Err       EeMissingName)

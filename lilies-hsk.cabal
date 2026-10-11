@@ -65,7 +65,9 @@ executable lilies-hsk
                       Shared
                       L0
                       P0
+                      T01
                       L1
+                      P1
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:
