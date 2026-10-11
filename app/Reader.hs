@@ -149,6 +149,10 @@ l0 name src =
     -- | A node without its location.  The alternatives are tried in the order
     --   that resolves the prefix overlaps, and every risky one is 'P.try' so
     --   that a partial match rewinds and 'recover' stays reachable.
+    --
+    --   The four @#@-forms the reader encodes -- @#true@/@#false@, @#:name@,
+    --   @#r"..."@ and @#\...@ -- sit in front of 'symbol' and win by that order
+    --   alone.  Any other @#@-form is an ordinary symbol.
     body :: Parser Node
     body = P.try list
        <|> P.try rawString
@@ -158,26 +162,16 @@ l0 name src =
        <|> P.try string
        <|> P.try number
        <|> symbol
-       <|> P.try badBoolean
        <|> recover
 
     -- | Anything unlexable.  Each branch consumes at least one character, so
     --   the item loops always make progress, and the last one is total.
     recover :: Parser Node
-    recover = unmatchedClose <|> unknownSigil <|> invalidChar
+    recover = unmatchedClose <|> invalidChar
 
     -- | A @)@ with no opener.
     unmatchedClose :: Parser Node
     unmatchedClose = EsErr EeUnmatchedClose <$ C.char ')'
-
-    -- | A @#@ that starts none of the forms above, taken together with the name
-    --   it introduces so that a single node covers @#z@ rather than leaving a
-    --   stray @z@ behind.
-    unknownSigil :: Parser Node
-    unknownSigil = do
-      _ <- C.char '#'
-      _ <- P.many symbolChar
-      pure (EsErr EeUnknownSigil)
 
     -- | A character that begins no lexeme.  Unreachable for the lexemes above,
     --   but kept as the total fallback that guarantees progress.
@@ -199,11 +193,12 @@ l0 name src =
     symbolChar :: Parser Char
     symbolChar = P.satisfy $ \c -> not (isSpace c) && c `notElem` "()\";"
 
-    -- | An ordinary identifier.  Guarded so that it never takes over a number
-    --   or one of the @#@ forms.
+    -- | An ordinary identifier, which includes every @#@-form the reader does not
+    --   encode: @#int@, @#z@, even @#t@.  Guarded so that it never takes over a
+    --   number; the encoded @#@-forms are kept out of its way by coming first in
+    --   'body' rather than by a guard here.
     symbol :: Parser Node
     symbol = do
-      P.notFollowedBy (C.char '#')
       P.notFollowedBy C.digitChar
       P.notFollowedBy (P.try (P.oneOf "+-" *> C.digitChar))
       cs <- P.some symbolChar
@@ -211,19 +206,13 @@ l0 name src =
 
     ------------------------------------------------------------- sigils
 
+    -- | @#true@ or @#false@, whole.  Anything longer, such as @#truex@, is not one
+    --   of these and falls through to 'symbol'.
     boolean :: Parser Node
     boolean = do
       s <- C.string "#true" <|> C.string "#false"
       P.notFollowedBy symbolChar
       pure (EsLiteral (N.LaBoolean s))
-
-    -- | @#t@ or @#f@ followed by more name: a misspelled boolean.
-    badBoolean :: Parser Node
-    badBoolean = do
-      _ <- C.char '#'
-      _ <- P.oneOf "tf"
-      _ <- P.many symbolChar
-      pure (EsErr EeInvalidBoolean)
 
     syntaxSym :: Parser Node
     syntaxSym = do
@@ -370,6 +359,7 @@ l0 name src =
     site o c n cs =
       Span
         { loc    = fromIntegral o
+        , ln     = lineNumber o
         , col    = fromIntegral c
         , len    = fromIntegral n
         , slice  = take n (drop o src)
@@ -380,6 +370,10 @@ l0 name src =
 
     fileSite :: [String] -> Span
     fileSite = site 0 1 (length src)
+
+    -- | The 1-based number of the line the given offset falls on.
+    lineNumber :: Int -> Integer
+    lineNumber off = fromIntegral (length (takeWhile (<= off) lineStarts))
 
     -- | The whole source line containing the given offset.
     lineAt :: Int -> String

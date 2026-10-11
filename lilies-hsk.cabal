@@ -68,6 +68,7 @@ executable lilies-hsk
                       T01
                       L1
                       P1
+                      Pretty
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:
